@@ -25,6 +25,7 @@ builder.Services.AddAutoMapper(typeof(MappingConfig));
 // En el AddScoped se se agregue la interfaz de IVilaRepositorio,
 //  con su respectiva implementación, que viene a ser Villarepositorio.
 builder.Services.AddScoped<IVillaRepositorio, VillaRepositorio>();
+builder.Services.AddScoped<INumeroVillaRepositorio, NumeroVillaRepositorio>();
 
 var app = builder.Build();
 

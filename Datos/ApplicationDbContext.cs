@@ -16,6 +16,7 @@ namespace villaMagica.Datos
             
         }
         public DbSet<Villa> Villas { get; set; } = null!;
+        public DbSet<NumeroVilla> NumeroVillas { get; set; } = null!;
 
         //  Vamos crear un  método que pertenece al DbContext llamado un OnModelCreating().
         //  Este método nosotros lo vamos a hacer override para cambiar sus características

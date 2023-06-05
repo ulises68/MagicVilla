@@ -24,24 +24,27 @@ namespace villaMagica.Controllers
      // pero es un controlador de tipo API.
 
      // hereda de una clase llamada controllerBase, esto hace que sea  una clase de tipo controlador.
-    public class VillaController : ControllerBase
+    public class NumeroVillaController : ControllerBase
     {
         // usamos un _ a las variables privadas
         // y pasamos como parametro a Ilogger en la clase que estamos
-       private readonly ILogger<VillaController> _logger;
+       private readonly ILogger<NumeroVillaController> _logger;
        // quitamos el ApplicationDbContext
        // private readonly ApplicationDbContext _db;
-       private readonly IVillaRepositorio _villaRepo;
+       private readonly IVillaRepositorio _villaRepo; // dejamos _villaRepo por si mas adelante la necesitemos
+       private readonly INumeroVillaRepositorio _numeroRepo;
        // inyectamos el servicio de Automapper y usamo la interfaz IMapper control. using AutoMapper
        private readonly IMapper _imapper;
        // Esta variable no hay que inyectarlo pero si debemos hacer es inicializarlo en nuestro controlador.
        protected APiResponse _response;
         // escribimos ctor
         // inyectamos el ApplicationDbContext en contructor y el IMapper
-       public VillaController(ILogger<VillaController> logger, IVillaRepositorio villaRepo,IMapper imapper )
+       public NumeroVillaController(ILogger<NumeroVillaController> logger, IVillaRepositorio villaRepo,
+       INumeroVillaRepositorio numeroRepo,IMapper imapper )
        {
          _logger = logger;
          _villaRepo=villaRepo;
+         _numeroRepo = numeroRepo;
          _imapper= imapper;
          _response = new();
        }
@@ -57,17 +60,17 @@ namespace villaMagica.Controllers
        // Ahora  ya no sera de tipo IEnnumerable de nuestra lista, sino que sea de tipo APiResponse.
        // Es decir, ahora cada uno de nuestros Endpoints va a retornar un APiResponse
        // IEnumerable<VillaDto>
-        public async Task <ActionResult <APiResponse>> GetVillas()
+        public async Task <ActionResult <APiResponse>> GetNumeroVillas()
         { 
             // shift-alt-Flecha Arriba copiar
             // Alt-Flecha mover codigo
             // ctr-alt- Flecha abajo multicurso
         try
             {
-                _logger.LogInformation("Obteniendo todas las villas");
+                _logger.LogInformation("Obteniendo Numeros villas");
                  // creamos una lista de IEnumerable de tipo Villa, que se llamara villaList
-                IEnumerable<Villa> villaList = await _villaRepo.ObtenerTodos(); 
-                _response.Resultado = _imapper.Map<IEnumerable<VillaDto>>(villaList);
+                IEnumerable<NumeroVilla> numeroVillaList = await _numeroRepo.ObtenerTodos(); 
+                _response.Resultado = _imapper.Map<IEnumerable<NumeroVillaDto>>(numeroVillaList);
                 _response.statusCode = HttpStatusCode.OK; // using System.Net;
                 // enviamos toda la respuesta
                 return Ok(_response); 
@@ -82,33 +85,33 @@ namespace villaMagica.Controllers
            return _response;
         }
         
-        [HttpGet("id:int", Name ="GetVilla")]
+        [HttpGet("id:int", Name ="GetNumeroVilla")]
          // para documentar usaremos el atributo  [ProducesResponseType]
          [ProducesResponseType(StatusCodes.Status200OK)]
          [ProducesResponseType(StatusCodes.Status400BadRequest)]
          [ProducesResponseType(StatusCodes.Status404NotFound)]
-        public  async Task<ActionResult<APiResponse>> GetVilla(int id)
+        public  async Task<ActionResult<APiResponse>> GetNumeroVilla(int id)
         {
             try
             {
                  // verificamos que si el id = 0
                 if (id ==0){
-                 _logger.LogError("Error al traer villa con Id " + id);
+                 _logger.LogError("Error al traer Numero Villa con Id " + id);
                  _response.statusCode = HttpStatusCode.BadRequest;
                  _response.IsExitoso = false;
                  return BadRequest(_response);
                 }
                 // var villa = VillaStore.villaList!.FirstOrDefault(v=>v.Id == id)!;
                   // traenos un registro en base el id que le pasamos.
-                  var villa = await _villaRepo.Obtener(v=>v.Id == id); //_db.Villas.FirstOrDefaultAsync(v=>v.Id == id)!;
+                  var numeroVilla = await _numeroRepo.Obtener(v=>v.VillaNo == id); //_db.Villas.FirstOrDefaultAsync(v=>v.Id == id)!;
                 // verificamos que si no hay ninguno
-                 if (villa == null){
+                 if (numeroVilla == null){
                      _response.statusCode = HttpStatusCode.NotFound;
                      _response.IsExitoso = false;
                      return NotFound(_response);
                  }
                  // Lo que queremos retorna es VillaDto y de donde obtenemos los datos, en este caso de villa
-                 _response.Resultado = _imapper.Map<VillaDto>(villa);
+                 _response.Resultado = _imapper.Map<NumeroVillaDto>(numeroVilla);
                  _response.statusCode = HttpStatusCode.OK;
                  return Ok(_response);
             }
@@ -129,7 +132,7 @@ namespace villaMagica.Controllers
         // El atributo FromBody nos indica que nosotros vamos a recibir datos;  ademas le vamos a indicar
         // el tipo de dato que vamos a recibir, en este caso sera del  tipo del modelo VillaDto
         // cambiamos el VillaDto por VillaCreateDto
-        public async Task<ActionResult<APiResponse>> CrearVilla([FromBody] VillaCreateDto createDto)
+        public async Task<ActionResult<APiResponse>> CrearVilla([FromBody] NumeroVillaCreateDto createDto)
         {
              try
              {
@@ -137,26 +140,38 @@ namespace villaMagica.Controllers
                 // Model State me va evitar de que se siga con las siguientes líneas de código.
                   return BadRequest(ModelState);
              }
-             
-             if (await _villaRepo.Obtener(v=>v.Nombre!.ToLower() == createDto.Nombre!.ToLower()) !=null)
+             // comparamos que no exista un mismo numero de villa
+             if (await _numeroRepo.Obtener(v=>v.VillaNo == createDto.VillaNo) !=null)
              {
-                ModelState.AddModelError("NombreExiste","La Villa con ese nombre ya Existe!");
+                ModelState.AddModelError("NumeroExiste","El numero de Villa ya existe!");
                 return BadRequest(ModelState);
              }
+
+             // Vamos a verificar de  que si existe Id de padre
+             // Tenemos que controlar en el caso de que nos envíe un ID del padre que no exista
+             // es decir una id de villa que no exista
+              if (await _villaRepo.Obtener(v=>v.Id==createDto.VillaId) == null){
+                // Aqui vamos a necesitar villaRepo, porque con el podemos obtener el ID del padre.
+                // Entonces aquí le mando un filtro donde el ID se es igual a lo que me está enviando el 
+                // createDto.VillaId si es nullo quiere decir que no existe el padre.
+                ModelState.AddModelError("ClaveForanea","El Id de le Villa no existe!");
+                return BadRequest(ModelState);
+             }
+
              if (createDto== null) // No, nos estan enviando datos, por lo tanto no podemos guardar la informacion
              {
                 return BadRequest(createDto);
              }
              // este codigo equivale al villa modelo = new () {......}
-                 Villa modelo = _imapper.Map<Villa>(createDto);
+                 NumeroVilla modelo = _imapper.Map<NumeroVilla>(createDto);
              // antes de grabarlo obtenemos la fecha del sistema
              modelo.FechaCreacion = DateTime.Now;
              modelo.FechaActualizacion = DateTime.Now;        
-             await _villaRepo.Crear(modelo); // El SaveChangesAsync ya esta incluidor en crear()
+             await _numeroRepo.Crear(modelo); // El SaveChangesAsync ya esta incluidor en crear()
              _response.Resultado = modelo;
              _response.statusCode = HttpStatusCode.Created;
 
-          return CreatedAtRoute("GetVilla", new {id=modelo.Id}, _response);
+          return CreatedAtRoute("GetNumeroVilla", new {id=modelo.VillaNo}, _response);
                 
              }
              catch (System.Exception ex)
@@ -174,9 +189,10 @@ namespace villaMagica.Controllers
            
            [HttpDelete("id:int")]
            [ProducesResponseType(StatusCodes.Status204NoContent)]
+           [ProducesResponseType(StatusCodes.Status200OK)]
            [ProducesResponseType(StatusCodes.Status400BadRequest)]
            [ProducesResponseType(StatusCodes.Status404NotFound)]
-           public async Task<IActionResult> DeleteVilla(int id)
+           public async Task<IActionResult> DeleteNumeroVilla(int id)
            {
                 try
                 {
@@ -187,15 +203,15 @@ namespace villaMagica.Controllers
                        return BadRequest(_response);
                    }
             
-                   var villa = await _villaRepo.Obtener(v=>v.Id == id);
-                  if (villa==null)
+                  var numeroVilla = await _numeroRepo.Obtener(v=>v.VillaNo == id);
+                  if (numeroVilla==null)
                   {
                       _response.IsExitoso = false;
                       _response.statusCode = HttpStatusCode.NotFound;
                       return NotFound(_response);
                   }
                        
-                   await _villaRepo.Remover(villa); // el SaveChangeASync ya viene incorporado en remover.
+                   await _numeroRepo.Remover(numeroVilla); // el SaveChangeASync ya viene incorporado en remover.
                    _response.statusCode = HttpStatusCode.NoContent;
                    // En NoContent no le podemos enviar el statusCode ya que no recibe ningun parametro
                    // para eso vamos a usar Ok
@@ -212,35 +228,47 @@ namespace villaMagica.Controllers
         
         [HttpPut("{id:int}")]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
+        [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
-        public async Task<IActionResult> UpdateVilla (int id, [FromBody] VillaUpdateDto updateDto)
+        public async Task<IActionResult> UpdateNumeroVilla (int id, [FromBody] NumeroVillaUpdateDto updateDto)
         {
-            if (updateDto==null || id!=updateDto.Id)
+            if (updateDto==null || id!=updateDto.VillaNo)
             {
                  _response.IsExitoso = false;
                  _response.statusCode = HttpStatusCode.BadRequest;
                 return BadRequest(_response);
             }
-         Villa modelo = _imapper.Map<Villa>(updateDto);
+            // si nos envian un ID del padre que no existe tenemos que validarlo
+            if (await _villaRepo.Obtener(v=>v.Id == updateDto.VillaId)==null)
+            {
+                ModelState.AddModelError("ClaveForanea","El Id de la villa No existe!");
+                return BadRequest(ModelState);
+            }
+         NumeroVilla modelo = _imapper.Map<NumeroVilla>(updateDto);
              
-            await _villaRepo.Actualizar(modelo);
+            await _numeroRepo.Actualizar(modelo);
              // como no vamos a retornar el modelo usamos No contenido
              _response.statusCode = HttpStatusCode.NoContent;
              return Ok(_response);
         }
 
         [HttpPatch("{id:int}")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
-        public async Task<IActionResult> UpdatePartialVilla (int id,[FromBody] JsonPatchDocument<VillaUpdateDto> patchDto)
+        public async Task<IActionResult> UpdateNumeroPartialVilla (int id,[FromBody] JsonPatchDocument<VillaUpdateDto> patchDto)
         {
             if (patchDto==null || id==0)
             {
                 return BadRequest();
             }
             
-            var villa = await _villaRepo.Obtener(v=>v.Id == id, tracked:false)!; // false para que sea AsNoTracking
-              
+            
+           // var villa = await _villaRepo.Obtener(v=>v.Id == id, tracked:false)!; // false para que sea AsNoTracking
+
+             var villa = await _villaRepo.Obtener(v=>v.Id == id, tracked:false)!; // false para que sea AsNoTracking
+
+                       
               VillaUpdateDto villaDto = _imapper.Map<VillaUpdateDto>(villa);
               
               if (villa == null) return BadRequest();
